@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="az" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#09090b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Xərc Bölüşdürücü — server olmadan P2P qrup borc izləyicisi">
+
+  <title>Debtly — Xərc Bölüşdürücü</title>
+
+  <!-- PWA Manifest (inline data URI) -->
+  <link rel="manifest" id="app-manifest" href="#">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2309090b' width='100' height='100' rx='22'/%3E%3Ctext x='50' y='62' text-anchor='middle' font-size='48' fill='%238b5cf6'%3E₿%3C/text%3E%3C/svg%3E">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+          animation: {
+            'fade-in': 'fadeIn 0.25s ease-out',
+            'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            'scale-in': 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          },
+          keyframes: {
+            fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
+            slideUp: { from: { opacity: '0', transform: 'translateY(16px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+            scaleIn: { from: { opacity: '0', transform: 'scale(0.95)' }, to: { opacity: '1', transform: 'scale(1)' } },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  <!-- QR Code library -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+  </style>
+</head>
+
+<body class="h-full bg-zinc-950 text-zinc-100 font-sans antialiased" x-data="expenseSplitter()" x-init="init()" x-cloak>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       ONBOARDING OVERLAY — first-run setup for name & group passcode
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div
+    x-show="showOnboarding"
+    x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4 safe-top safe-bottom"
+  >
+    <div class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-slide-up shadow-2xl shadow-violet-900/20">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="w-12 h-12 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-2xl">⚡</div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Debtly-yə xoş gəlmisiniz</h1>
+          <p class="text-sm text-zinc-400">P2P xərc bölüşdürücü — server yoxdur</p>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Adınız</label>
+          <input
+            type="text"
+            x-model="onboarding.myName"
+            placeholder="məs. Əli"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 transition"
+          >
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Qrup parolu</label>
+          <input
+            type="password"
+            x-model="onboarding.groupPasscode"
+            placeholder="Sinxronizasiya üçün ümumi parol"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 transition"
+          >
+          <p class="text-xs text-zinc-500 mt-2">Şifrəli sinxronizasiya üçün bu parolu qrupunuzla paylaşın.</p>
+        </div>
+      </div>
+      <button
+        @click="completeOnboarding()"
+        :disabled="!onboarding.myName.trim() || !onboarding.groupPasscode.trim()"
+        class="w-full mt-6 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3 min-h-[48px] transition active:scale-[0.98]"
+      >
+        Başla
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TOAST NOTIFICATIONS
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-full max-w-md px-4 safe-top pointer-events-none">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div
+        x-show="toast.visible"
+        x-transition
+        class="pointer-events-auto px-4 py-3 rounded-xl text-sm font-medium shadow-lg backdrop-blur-md border animate-slide-up"
+        :class="{
+          'bg-emerald-500/20 border-emerald-500/30 text-emerald-300': toast.type === 'success',
+          'bg-rose-500/20 border-rose-500/30 text-rose-300': toast.type === 'error',
+          'bg-zinc-800/90 border-zinc-700 text-zinc-200': toast.type === 'info',
+        }"
+        x-text="toast.message"
+      ></div>
+    </template>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MAIN APP SHELL — mobile-first max-w-md container
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="max-w-md mx-auto min-h-full flex flex-col safe-top safe-bottom" x-show="!showOnboarding">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-lg font-bold tracking-tight">Debtly</h1>
+          <p class="text-xs text-zinc-500" x-text="config.myName ? `Salam, ${config.myName}` : ''"></p>
+        </div>
+        <button
+          @click="openShareSheet()"
+          class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 min-h-[48px] text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition active:scale-95"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+          Sinxron
+        </button>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="sticky top-[65px] z-20 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-2">
+      <div class="flex">
+        <template x-for="tab in tabs" :key="tab.id">
+          <button
+            @click="activeTab = tab.id"
+            class="flex-1 py-3 min-h-[48px] text-sm font-medium transition relative"
+            :class="activeTab === tab.id ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'"
+          >
+            <span x-text="tab.label"></span>
+            <span
+              x-show="activeTab === tab.id"
+              class="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-violet-500 rounded-full"
+            ></span>
+          </button>
+        </template>
+      </div>
+    </nav>
+
+    <!-- ─── DASHBOARD TAB ─── -->
+    <main x-show="activeTab === 'dashboard'" class="flex-1 px-4 py-6 space-y-6 animate-fade-in">
+
+      <!-- Net Balance Block -->
+      <section class="text-center py-6">
+        <p class="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">Xalis balans</p>
+        <p
+          class="text-5xl font-extrabold tracking-tight transition-colors duration-300"
+          :class="netBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'"
+          x-text="formatCurrency(netBalance, true)"
+        ></p>
+        <p class="text-sm text-zinc-500 mt-2" x-text="netBalance >= 0 ? 'Ümumilikdə sizə borcludurlar' : 'Ümumilikdə siz borclusunuz'"></p>
+      </section>
+
+      <!-- Bi-directional Summary Cards -->
+      <section class="grid grid-cols-2 gap-3">
+        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
+          <p class="text-xs font-medium text-emerald-400/70 uppercase tracking-wider mb-1">Mənə borcludur</p>
+          <p class="text-2xl font-bold text-emerald-400 tracking-tight" x-text="formatCurrency(totalOwedToMe)"></p>
+        </div>
+        <div class="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4">
+          <p class="text-xs font-medium text-rose-400/70 uppercase tracking-wider mb-1">Mən borcluyam</p>
+          <p class="text-2xl font-bold text-rose-400 tracking-tight" x-text="formatCurrency(totalIOwe)"></p>
+        </div>
+      </section>
+
+      <!-- Directional Balance Cards -->
+      <section x-show="directionalBalances.length > 0">
+        <h2 class="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-3">Ətraflı</h2>
+        <div class="space-y-2">
+          <template x-for="item in directionalBalances" :key="item.key">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 flex items-center justify-between">
+              <p class="text-sm text-zinc-300" x-html="item.labelHtml"></p>
+              <span
+                class="text-sm font-semibold"
+                :class="item.isPositiveForMe ? 'text-emerald-400' : 'text-rose-400'"
+                x-text="formatCurrency(item.amount)"
+              ></span>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section x-show="directionalBalances.length === 0" class="text-center py-8">
+        <p class="text-zinc-500 text-sm">Hamısı bağlanıb! 🎉</p>
+      </section>
+
+      <!-- Quick Actions -->
+      <section class="grid grid-cols-2 gap-3 pt-2">
+        <button
+          @click="openExpenseModal()"
+          class="bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-xl py-4 min-h-[48px] transition active:scale-[0.98] shadow-lg shadow-violet-900/30"
+        >
+          + Xərc əlavə et
+        </button>
+        <button
+          @click="openSettleModal()"
+          class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-semibold rounded-xl py-4 min-h-[48px] transition active:scale-[0.98]"
+        >
+          Hesabı bağla
+        </button>
+      </section>
+    </main>
+
+    <!-- ─── FRIENDS TAB ─── -->
+    <main x-show="activeTab === 'friends'" class="flex-1 px-4 py-6 space-y-4 animate-fade-in">
+      <div class="flex gap-2">
+        <input
+          type="text"
+          x-model="newFriendName"
+          @keydown.enter="addFriend()"
+          placeholder="Dostun adı"
+          class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 min-h-[48px] text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 transition"
+        >
+        <button
+          @click="addFriend()"
+          :disabled="!newFriendName.trim()"
+          class="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-semibold rounded-xl px-5 min-h-[48px] transition active:scale-95"
+        >
+          Əlavə et
+        </button>
+      </div>
+
+      <div class="space-y-2">
+        <!-- Me (always present) -->
+        <div class="bg-zinc-900 border border-violet-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-sm font-bold text-violet-400" x-text="initials(config.myName)"></div>
+            <div>
+              <p class="font-medium" x-text="config.myName"></p>
+              <p class="text-xs text-violet-400">Siz</p>
+            </div>
+          </div>
+        </div>
+
+        <template x-for="friend in friends" :key="friend.id">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 flex items-center justify-between group">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-400" x-text="initials(friend.name)"></div>
+              <p class="font-medium" x-text="friend.name"></p>
+            </div>
+            <button
+              @click="removeFriend(friend.id)"
+              class="opacity-0 group-hover:opacity-100 sm:opacity-100 text-rose-400 hover:text-rose-300 p-2 min-w-[48px] min-h-[48px] flex items-center justify-center transition"
+              title="Dostu sil"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </template>
+
+        <p x-show="friends.length === 0" class="text-center text-zinc-500 text-sm py-8">Xərcləri bölüşdürməyə başlamaq üçün dostlar əlavə edin.</p>
+      </div>
+
+      <!-- Settings -->
+      <section class="pt-6 border-t border-zinc-800 space-y-3">
+        <h2 class="text-xs font-medium text-zinc-500 uppercase tracking-widest">Parametrlər</h2>
+        <div>
+          <label class="block text-xs text-zinc-500 mb-1">Qrup parolu</label>
+          <input
+            type="password"
+            x-model="config.groupPasscode"
+            @change="save()"
+            class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 min-h-[48px] focus:outline-none focus:border-violet-500 transition"
+          >
+        </div>
+      </section>
+    </main>
+
+    <!-- ─── LEDGER TAB ─── -->
+    <main x-show="activeTab === 'ledger'" class="flex-1 px-4 py-6 animate-fade-in">
+      <div x-show="sortedExpenses.length === 0" class="text-center py-16">
+        <p class="text-zinc-500 text-sm">Hələ xərc yoxdur.</p>
+        <button @click="openExpenseModal()" class="mt-4 text-violet-400 text-sm font-medium hover:text-violet-300 transition min-h-[48px] px-4">İlk xərcinizi əlavə edin →</button>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="expense in sortedExpenses" :key="expense.id">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 group transition hover:border-zinc-700">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-zinc-100 truncate" x-text="expense.description"></p>
+                <p class="text-sm text-zinc-500 mt-1">
+                  <span class="text-zinc-400" x-text="getPersonName(expense.paidById)"></span>
+                  ödədi ·
+                  <span x-text="formatDate(expense.timestamp)"></span>
+                </p>
+                <p class="text-xs text-zinc-600 mt-1">
+                  Bölüşdürülüb:
+                  <span x-text="expense.splitBetweenIds.map(id => getPersonName(id)).join(', ')"></span>
+                </p>
+              </div>
+              <div class="text-right flex flex-col items-end gap-2">
+                <p class="text-lg font-bold text-zinc-100 tracking-tight" x-text="formatCurrency(expense.totalAmount)"></p>
+                <button
+                  @click="deleteExpense(expense.id)"
+                  class="text-rose-400/60 hover:text-rose-400 text-xs font-medium min-h-[48px] min-w-[48px] flex items-center justify-center transition opacity-0 group-hover:opacity-100 sm:opacity-100"
+                >
+                  Ləğv et
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       ADD EXPENSE MODAL
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div
+    x-show="modals.expense"
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition ease-in duration-150"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 safe-bottom"
+    @click.self="closeExpenseModal()"
+  >
+    <div
+      x-show="modals.expense"
+      x-transition:enter="transition ease-out duration-300"
+      x-transition:enter-start="opacity-0 translate-y-8"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto"
+    >
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold tracking-tight">Xərc əlavə et</h2>
+        <button @click="closeExpenseModal()" class="text-zinc-500 hover:text-zinc-300 p-2 min-w-[48px] min-h-[48px] flex items-center justify-center">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Təsvir</label>
+          <input type="text" x-model="expenseForm.description" placeholder="Şam yeməyi, taksi, ərzaq…"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] focus:outline-none focus:border-violet-500 transition">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Ümumi məbləğ</label>
+          <input type="number" x-model.number="expenseForm.totalAmount" min="0" step="0.01" placeholder="0.00"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] text-2xl font-bold tracking-tight focus:outline-none focus:border-violet-500 transition">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Kim ödəyib</label>
+          <select x-model="expenseForm.paidById"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] focus:outline-none focus:border-violet-500 transition appearance-none">
+            <option value="__me__" x-text="config.myName + ' (Mən)'"></option>
+            <template x-for="friend in friends" :key="friend.id">
+              <option :value="friend.id" x-text="friend.name"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Kimlər arasında bölünür</label>
+          <div class="space-y-2 bg-zinc-950 border border-zinc-700 rounded-xl p-3">
+            <label class="flex items-center gap-3 min-h-[48px] px-2 rounded-lg hover:bg-zinc-900 cursor-pointer transition">
+              <input type="checkbox" :checked="expenseForm.splitBetweenIds.includes('__me__')" @change="toggleSplitParticipant('__me__')"
+                class="w-5 h-5 rounded border-zinc-600 text-violet-600 focus:ring-violet-500 bg-zinc-800">
+              <span x-text="config.myName + ' (Mən)'"></span>
+            </label>
+            <template x-for="friend in friends" :key="friend.id">
+              <label class="flex items-center gap-3 min-h-[48px] px-2 rounded-lg hover:bg-zinc-900 cursor-pointer transition">
+                <input type="checkbox" :checked="expenseForm.splitBetweenIds.includes(friend.id)" @change="toggleSplitParticipant(friend.id)"
+                  class="w-5 h-5 rounded border-zinc-600 text-violet-600 focus:ring-violet-500 bg-zinc-800">
+                <span x-text="friend.name"></span>
+              </label>
+            </template>
+          </div>
+          <p x-show="expenseForm.splitBetweenIds.length > 0 && expenseForm.totalAmount > 0" class="text-xs text-zinc-500 mt-2">
+            <span x-text="formatCurrency(expenseForm.totalAmount / expenseForm.splitBetweenIds.length)"></span> hər nəfərə
+          </p>
+        </div>
+      </div>
+
+      <button
+        @click="submitExpense()"
+        :disabled="!canSubmitExpense"
+        class="w-full mt-6 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-semibold rounded-xl py-3 min-h-[48px] transition active:scale-[0.98]"
+      >
+        Xərci saxla
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SETTLE UP MODAL
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div
+    x-show="modals.settle"
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 safe-bottom"
+    @click.self="closeSettleModal()"
+  >
+    <div
+      x-show="modals.settle"
+      x-transition:enter="animate-slide-up"
+      class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6"
+    >
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold tracking-tight">Hesabı bağla</h2>
+        <button @click="closeSettleModal()" class="text-zinc-500 hover:text-zinc-300 p-2 min-w-[48px] min-h-[48px] flex items-center justify-center">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Dostla</label>
+          <select x-model="settleForm.friendId"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] focus:outline-none focus:border-violet-500 transition">
+            <option value="">Dost seçin…</option>
+            <template x-for="friend in friends" :key="friend.id">
+              <option :value="friend.id" x-text="friend.name"></option>
+            </template>
+          </select>
+        </div>
+
+        <div x-show="settleForm.friendId" class="bg-zinc-950 border border-zinc-700 rounded-xl p-4 text-center">
+          <p class="text-xs text-zinc-500 uppercase tracking-wider mb-1">Cari balans</p>
+          <p class="text-2xl font-bold tracking-tight" :class="settleBalanceClass" x-text="settleBalanceLabel"></p>
+        </div>
+
+        <div x-show="settleForm.friendId && settleBalanceAmount > 0">
+          <label class="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Ödəmə məbləği</label>
+          <input type="number" x-model.number="settleForm.amount" min="0" :max="settleBalanceAmount" step="0.01"
+            class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] text-xl font-bold focus:outline-none focus:border-violet-500 transition">
+          <button @click="settleForm.amount = settleBalanceAmount" class="text-xs text-violet-400 mt-2 hover:text-violet-300 min-h-[48px]">Tam məbləği bağla</button>
+        </div>
+      </div>
+
+      <button
+        @click="submitSettlement()"
+        :disabled="!canSubmitSettlement"
+        class="w-full mt-6 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-semibold rounded-xl py-3 min-h-[48px] transition active:scale-[0.98]"
+      >
+        Ödəməni qeyd et
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SHARE / SYNC ACTION SHEET
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div
+    x-show="modals.share"
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-40 flex items-end justify-center bg-black/70 backdrop-blur-sm safe-bottom"
+    @click.self="closeShareSheet()"
+  >
+    <div
+      x-show="modals.share"
+      x-transition:enter="animate-slide-up"
+      class="w-full max-w-md bg-zinc-900 border-t border-zinc-800 rounded-t-2xl p-6 pb-8"
+    >
+      <div class="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-6"></div>
+      <h2 class="text-lg font-bold tracking-tight mb-2">Sinxron & Paylaş</h2>
+      <p class="text-sm text-zinc-500 mb-6">Bu şifrəli linki və ya QR kodu qrupunuzla paylaşın. Hər kəsin eyni parolu olmalıdır.</p>
+
+      <!-- QR Code container -->
+      <div class="flex justify-center mb-6">
+        <div id="qr-code" class="bg-white p-3 rounded-xl"></div>
+      </div>
+
+      <!-- Sync URL -->
+      <div class="bg-zinc-950 border border-zinc-700 rounded-xl p-3 mb-4">
+        <p class="text-xs text-zinc-500 break-all leading-relaxed" x-text="syncUrl || 'Yaradılır…'"></p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <button
+          @click="copySyncLink()"
+          class="bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-xl py-3 min-h-[48px] transition active:scale-[0.98]"
+        >
+          Linki kopyala
+        </button>
+        <button
+          @click="closeShareSheet()"
+          class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold rounded-xl py-3 min-h-[48px] transition"
+        >
+          Hazırdır
+        </button>
+      </div>
+
+      <p x-show="syncError" class="text-rose-400 text-xs mt-4 text-center" x-text="syncError"></p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SYNC IMPORT DIALOG (triggered by URL hash)
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div
+    x-show="modals.syncImport"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+  >
+    <div class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-scale-in">
+      <h2 class="text-lg font-bold tracking-tight mb-2">Sinxron məlumatını idxal et</h2>
+      <p class="text-sm text-zinc-400 mb-4">Qrup üzvündən gələn məlumat. Şifrəni açmaq və birləşdirmək üçün qrup parolunu daxil edin.</p>
+      <input
+        type="password"
+        x-model="syncImportPasscode"
+        placeholder="Qrup parolu"
+        class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 min-h-[48px] mb-4 focus:outline-none focus:border-violet-500 transition"
+      >
+      <div class="grid grid-cols-2 gap-3">
+        <button @click="cancelSyncImport()" class="bg-zinc-800 hover:bg-zinc-700 rounded-xl py-3 min-h-[48px] font-medium transition">Ləğv et</button>
+        <button @click="confirmSyncImport()" class="bg-violet-600 hover:bg-violet-700 rounded-xl py-3 min-h-[48px] font-semibold transition">Məlumatı birləşdir</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       APPLICATION LOGIC — Alpine.js component + Crypto + Sync + PWA
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <script>
+    /* ─────────────────────────────────────────────────────────────────────────
+       CONSTANTS
+       ───────────────────────────────────────────────────────────────────────── */
+    const STORAGE_KEY = 'debtly_v1';
+    const ME_ID = '__me__';
+    const CRYPTO_SALT_LEN = 16;
+    const CRYPTO_IV_LEN = 12;
+    const PBKDF2_ITERATIONS = 100000;
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       UTILITY HELPERS
+       ───────────────────────────────────────────────────────────────────────── */
+    const uid = () => crypto.randomUUID();
+
+    const round2 = (n) => Math.round(n * 100) / 100;
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       COMPRESSION — gzip via Compression Streams API (with fallback)
+       ───────────────────────────────────────────────────────────────────────── */
+    const Compression = {
+      async compress(str) {
+        if (typeof CompressionStream !== 'undefined') {
+          const stream = new Blob([new TextEncoder().encode(str)])
+            .stream()
+            .pipeThrough(new CompressionStream('gzip'));
+          const buf = await new Response(stream).arrayBuffer();
+          return new Uint8Array(buf);
+        }
+        return new TextEncoder().encode(str);
+      },
+
+      async decompress(bytes) {
+        if (typeof DecompressionStream !== 'undefined') {
+          const stream = new Blob([bytes])
+            .stream()
+            .pipeThrough(new DecompressionStream('gzip'));
+          const buf = await new Response(stream).arrayBuffer();
+          return new TextDecoder().decode(buf);
+        }
+        return new TextDecoder().decode(bytes);
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       ENCRYPTION — Web Crypto API (AES-GCM + PBKDF2)
+       Passcode-derived key secures sync payloads shared via URL / QR.
+       ───────────────────────────────────────────────────────────────────────── */
+    const CryptoEngine = {
+      async deriveKey(passcode, salt) {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw', enc.encode(passcode), 'PBKDF2', false, ['deriveKey']
+        );
+        return crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+          keyMaterial,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        );
+      },
+
+      async encrypt(passcode, plaintext) {
+        const salt = crypto.getRandomValues(new Uint8Array(CRYPTO_SALT_LEN));
+        const iv = crypto.getRandomValues(new Uint8Array(CRYPTO_IV_LEN));
+        const key = await this.deriveKey(passcode, salt);
+        const enc = new TextEncoder();
+        const ciphertext = await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv },
+          key,
+          enc.encode(plaintext)
+        );
+        const combined = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
+        combined.set(salt, 0);
+        combined.set(iv, salt.length);
+        combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
+        return btoa(String.fromCharCode(...combined));
+      },
+
+      async decrypt(passcode, encoded) {
+        const raw = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        const salt = raw.slice(0, CRYPTO_SALT_LEN);
+        const iv = raw.slice(CRYPTO_SALT_LEN, CRYPTO_SALT_LEN + CRYPTO_IV_LEN);
+        const data = raw.slice(CRYPTO_SALT_LEN + CRYPTO_IV_LEN);
+        const key = await this.deriveKey(passcode, salt);
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(decrypted);
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       BALANCES ENGINE — directional pairwise debt calculation
+       Processes expense log into "who owes whom how much" relationships.
+       ───────────────────────────────────────────────────────────────────────── */
+    const BalancesEngine = {
+      /** Build raw pairwise debt map from expenses */
+      buildPairwiseDebts(expenses) {
+        const debts = {};
+
+        for (const exp of expenses) {
+          const participants = exp.splitBetweenIds || [];
+          if (!participants.length || !exp.totalAmount) continue;
+
+          const share = exp.totalAmount / participants.length;
+          for (const pid of participants) {
+            if (pid !== exp.paidById) {
+              const key = `${pid}->${exp.paidById}`;
+              debts[key] = round2((debts[key] || 0) + share);
+            }
+          }
+        }
+        return debts;
+      },
+
+      /** Net bilateral debts between each pair (A↔B) */
+      simplifyPairwise(debts) {
+        const result = {};
+        const processed = new Set();
+
+        for (const key of Object.keys(debts)) {
+          if (processed.has(key)) continue;
+          const [from, to] = key.split('->');
+          const reverseKey = `${to}->${from}`;
+          const forward = debts[key] || 0;
+          const reverse = debts[reverseKey] || 0;
+          const net = round2(forward - reverse);
+
+          if (net > 0) result[key] = net;
+          else if (net < 0) result[reverseKey] = round2(-net);
+
+          processed.add(key);
+          processed.add(reverseKey);
+        }
+        return result;
+      },
+
+      /** Balance between two specific people */
+      balanceBetween(debts, personA, personB) {
+        const simplified = this.simplifyPairwise(debts);
+        const aOwesB = simplified[`${personA}->${personB}`] || 0;
+        const bOwesA = simplified[`${personB}->${personA}`] || 0;
+        return round2(aOwesB - bOwesA);
+      },
+
+      /** All balances relative to `meId` */
+      relativeToMe(simplified, meId, getName) {
+        const items = [];
+        const related = new Set();
+
+        for (const key of Object.keys(simplified)) {
+          const [from, to] = key.split('->');
+          if (from === meId || to === meId) {
+            related.add(from === meId ? to : from);
+          }
+        }
+
+        for (const otherId of related) {
+          // positive => otherId owes meId; negative => meId owes otherId
+          const amount = this.balanceBetween(simplified, otherId, meId);
+          if (Math.abs(amount) < 0.01) continue;
+
+          const otherName = getName(otherId);
+          const isPositiveForMe = amount > 0;
+          const absAmount = Math.abs(amount);
+
+          items.push({
+            key: `${otherId}`,
+            amount: absAmount,
+            isPositiveForMe,
+            labelHtml: isPositiveForMe
+              ? `<span class="text-emerald-400">${otherName}</span> mənə borcludur`
+              : `Mən <span class="text-rose-400">${otherName}</span>-a borcluyam`,
+          });
+        }
+
+        return items.sort((a, b) => b.amount - a.amount);
+      },
+
+      totalsForMe(simplified, meId) {
+        let owedToMe = 0;
+        let iOwe = 0;
+
+        for (const key of Object.keys(simplified)) {
+          const [from, to] = key.split('->');
+          const amount = simplified[key];
+          if (to === meId) owedToMe = round2(owedToMe + amount);
+          if (from === meId) iOwe = round2(iOwe + amount);
+        }
+
+        return { owedToMe, iOwe, net: round2(owedToMe - iOwe) };
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       MERGE & SYNC ENGINE — deduplication by id + timestamp
+       ───────────────────────────────────────────────────────────────────────── */
+    const MergeEngine = {
+      mergeFriends(local, incoming) {
+        const map = new Map(local.map(f => [f.id, f]));
+        for (const f of incoming) {
+          if (!f.id || !f.name) continue;
+          if (!map.has(f.id)) {
+            map.set(f.id, f);
+          }
+        }
+        return Array.from(map.values());
+      },
+
+      mergeExpenses(local, incoming) {
+        const map = new Map(local.map(e => [e.id, e]));
+        for (const e of incoming) {
+          if (!e.id) continue;
+          const existing = map.get(e.id);
+          if (!existing) {
+            map.set(e.id, e);
+          } else if ((e.timestamp || 0) > (existing.timestamp || 0)) {
+            map.set(e.id, e);
+          }
+        }
+        return Array.from(map.values());
+      },
+
+      mergeAll(localState, incomingState) {
+        return {
+          config: {
+            groupPasscode: localState.config.groupPasscode || incomingState.config?.groupPasscode || '',
+            myName: localState.config.myName || incomingState.config?.myName || '',
+          },
+          friends: this.mergeFriends(localState.friends, incomingState.friends || []),
+          expenses: this.mergeExpenses(localState.expenses, incomingState.expenses || []),
+        };
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       PWA — inline manifest + service worker registration
+       ───────────────────────────────────────────────────────────────────────── */
+    function setupPWA() {
+      const manifest = {
+        name: 'Debtly — Xərc Bölüşdürücü',
+        short_name: 'Debtly',
+        description: 'Server olmadan P2P xərc bölüşdürücü şifrəli sinxronizasiya ilə',
+        start_url: '.',
+        display: 'standalone',
+        background_color: '#09090b',
+        theme_color: '#09090b',
+        orientation: 'portrait-primary',
+        icons: [
+          {
+            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%2309090b' width='192' height='192' rx='40'/%3E%3Ctext x='96' y='120' text-anchor='middle' font-size='80' fill='%238b5cf6'%3E₿%3C/text%3E%3C/svg%3E",
+            sizes: '192x192',
+            type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+        ],
+      };
+
+      const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      document.getElementById('app-manifest').href = URL.createObjectURL(manifestBlob);
+
+      if ('serviceWorker' in navigator) {
+        const swCode = `
+          const CACHE = 'debtly-v1';
+          const ASSETS = [self.location.href];
+
+          self.addEventListener('install', (e) => {
+            e.waitUntil(
+              caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+            );
+          });
+
+          self.addEventListener('activate', (e) => {
+            e.waitUntil(
+              caches.keys().then((keys) =>
+                Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+              ).then(() => self.clients.claim())
+            );
+          });
+
+          self.addEventListener('fetch', (e) => {
+            if (e.request.method !== 'GET') return;
+            e.respondWith(
+              caches.match(e.request).then((cached) => {
+                const fetched = fetch(e.request).then((res) => {
+                  if (res.ok) {
+                    const clone = res.clone();
+                    caches.open(CACHE).then((cache) => cache.put(e.request, clone));
+                  }
+                  return res;
+                }).catch(() => cached);
+                return cached || fetched;
+              })
+            );
+          });
+        `;
+
+        const swBlob = new Blob([swCode], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(swBlob);
+        navigator.serviceWorker.register(swUrl).catch((err) => {
+          console.warn('[Debtly] Service Worker registration failed:', err);
+        });
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       ALPINE.JS ROOT COMPONENT
+       ───────────────────────────────────────────────────────────────────────── */
+    function expenseSplitter() {
+      return {
+        /* ── State ── */
+        config: { groupPasscode: '', myName: '' },
+        friends: [],
+        expenses: [],
+
+        activeTab: 'dashboard',
+        tabs: [
+          { id: 'dashboard', label: 'Panel' },
+          { id: 'friends', label: 'Dostlar' },
+          { id: 'ledger', label: 'Jurnal' },
+        ],
+
+        showOnboarding: false,
+        onboarding: { myName: '', groupPasscode: '' },
+
+        modals: { expense: false, settle: false, share: false, syncImport: false },
+        expenseForm: { description: '', totalAmount: 0, paidById: ME_ID, splitBetweenIds: [] },
+        settleForm: { friendId: '', amount: 0 },
+        newFriendName: '',
+
+        syncUrl: '',
+        syncError: '',
+        pendingSyncData: null,
+        syncImportPasscode: '',
+
+        toasts: [],
+
+        /* ── Computed (via getters in methods) ── */
+        get pairwiseDebts() {
+          return BalancesEngine.buildPairwiseDebts(this.expenses);
+        },
+
+        get simplifiedDebts() {
+          return BalancesEngine.simplifyPairwise(this.pairwiseDebts);
+        },
+
+        get directionalBalances() {
+          return BalancesEngine.relativeToMe(this.simplifiedDebts, ME_ID, (id) => this.getPersonName(id));
+        },
+
+        get totalOwedToMe() {
+          return BalancesEngine.totalsForMe(this.simplifiedDebts, ME_ID).owedToMe;
+        },
+
+        get totalIOwe() {
+          return BalancesEngine.totalsForMe(this.simplifiedDebts, ME_ID).iOwe;
+        },
+
+        get netBalance() {
+          return BalancesEngine.totalsForMe(this.simplifiedDebts, ME_ID).net;
+        },
+
+        get sortedExpenses() {
+          return [...this.expenses].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        },
+
+        get canSubmitExpense() {
+          return (
+            this.expenseForm.description.trim() &&
+            this.expenseForm.totalAmount > 0 &&
+            this.expenseForm.splitBetweenIds.length > 0
+          );
+        },
+
+        get settleBalanceAmount() {
+          if (!this.settleForm.friendId) return 0;
+          return Math.abs(BalancesEngine.balanceBetween(this.simplifiedDebts, ME_ID, this.settleForm.friendId));
+        },
+
+        get settleBalanceClass() {
+          const bal = BalancesEngine.balanceBetween(this.simplifiedDebts, ME_ID, this.settleForm.friendId);
+          if (bal > 0.01) return 'text-rose-400';
+          if (bal < -0.01) return 'text-emerald-400';
+          return 'text-zinc-400';
+        },
+
+        get settleBalanceLabel() {
+          if (!this.settleForm.friendId) return '';
+          const bal = BalancesEngine.balanceBetween(this.simplifiedDebts, ME_ID, this.settleForm.friendId);
+          const name = this.getPersonName(this.settleForm.friendId);
+          if (Math.abs(bal) < 0.01) return `${name} ilə hesab bağlıdır`;
+          if (bal > 0) return `Siz ${name}-a ${this.formatCurrency(bal)} borclusunuz`;
+          return `${name} sizə ${this.formatCurrency(-bal)} borcludur`;
+        },
+
+        get canSubmitSettlement() {
+          return this.settleForm.friendId && this.settleForm.amount > 0 && this.settleForm.amount <= this.settleBalanceAmount + 0.01;
+        },
+
+        /* ── Lifecycle ── */
+        init() {
+          setupPWA();
+          this.load();
+          this.showOnboarding = !this.config.myName || !this.config.groupPasscode;
+
+          this.$watch('settleForm.friendId', () => {
+            this.settleForm.amount = this.settleBalanceAmount;
+          });
+
+          this.$nextTick(() => this.handleSyncUrl());
+        },
+
+        /* ── Persistence ── */
+        load() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            this.config = data.config || this.config;
+            this.friends = data.friends || [];
+            this.expenses = data.expenses || [];
+          } catch (err) {
+            console.error('[Debtly] Failed to load state:', err);
+            this.toast('Saxlanılmış məlumat yüklənə bilmədi', 'error');
+          }
+        },
+
+        save() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              config: this.config,
+              friends: this.friends,
+              expenses: this.expenses,
+            }));
+          } catch (err) {
+            console.error('[Debtly] Failed to save:', err);
+            this.toast('Məlumat saxlanıla bilmədi', 'error');
+          }
+        },
+
+        /* ── Onboarding ── */
+        completeOnboarding() {
+          this.config.myName = this.onboarding.myName.trim();
+          this.config.groupPasscode = this.onboarding.groupPasscode.trim();
+          this.showOnboarding = false;
+          this.save();
+          this.toast('Xoş gəldiniz!', 'success');
+        },
+
+        /* ── Friends ── */
+        addFriend() {
+          const name = this.newFriendName.trim();
+          if (!name) return;
+          if (this.friends.some(f => f.name.toLowerCase() === name.toLowerCase())) {
+            this.toast('Dost artıq mövcuddur', 'error');
+            return;
+          }
+          this.friends.push({ id: uid(), name });
+          this.newFriendName = '';
+          this.save();
+          this.toast(`${name} əlavə edildi`, 'success');
+        },
+
+        removeFriend(id) {
+          const used = this.expenses.some(e =>
+            e.paidById === id || e.splitBetweenIds.includes(id)
+          );
+          if (used) {
+            this.toast('Silinmir — dostun xərcləri var', 'error');
+            return;
+          }
+          this.friends = this.friends.filter(f => f.id !== id);
+          this.save();
+        },
+
+        /* ── Expenses ── */
+        openExpenseModal() {
+          const allIds = [ME_ID, ...this.friends.map(f => f.id)];
+          this.expenseForm = {
+            description: '',
+            totalAmount: 0,
+            paidById: ME_ID,
+            splitBetweenIds: [...allIds],
+          };
+          this.modals.expense = true;
+        },
+
+        closeExpenseModal() {
+          this.modals.expense = false;
+        },
+
+        toggleSplitParticipant(id) {
+          const idx = this.expenseForm.splitBetweenIds.indexOf(id);
+          if (idx === -1) {
+            this.expenseForm.splitBetweenIds.push(id);
+          } else if (this.expenseForm.splitBetweenIds.length > 1) {
+            this.expenseForm.splitBetweenIds.splice(idx, 1);
+          }
+        },
+
+        submitExpense() {
+          if (!this.canSubmitExpense) return;
+          this.expenses.push({
+            id: uid(),
+            description: this.expenseForm.description.trim(),
+            totalAmount: round2(this.expenseForm.totalAmount),
+            paidById: this.expenseForm.paidById,
+            splitBetweenIds: [...this.expenseForm.splitBetweenIds],
+            timestamp: Date.now(),
+          });
+          this.save();
+          this.closeExpenseModal();
+          this.toast('Xərc əlavə edildi', 'success');
+        },
+
+        deleteExpense(id) {
+          this.expenses = this.expenses.filter(e => e.id !== id);
+          this.save();
+          this.toast('Xərc ləğv edildi', 'info');
+        },
+
+        /* ── Settlement ── */
+        openSettleModal() {
+          this.settleForm = { friendId: '', amount: 0 };
+          this.modals.settle = true;
+        },
+
+        closeSettleModal() {
+          this.modals.settle = false;
+        },
+
+        submitSettlement() {
+          if (!this.canSubmitSettlement) return;
+          const friendId = this.settleForm.friendId;
+          const amount = round2(this.settleForm.amount);
+          const friendName = this.getPersonName(friendId);
+          const bal = BalancesEngine.balanceBetween(this.simplifiedDebts, ME_ID, friendId);
+
+          let paidById, splitBetweenIds;
+          if (bal > 0) {
+            paidById = ME_ID;
+            splitBetweenIds = [friendId];
+          } else {
+            paidById = friendId;
+            splitBetweenIds = [ME_ID];
+          }
+
+          this.expenses.push({
+            id: uid(),
+            description: `${friendName} ilə hesablaşma`,
+            totalAmount: amount,
+            paidById,
+            splitBetweenIds,
+            timestamp: Date.now(),
+          });
+
+          this.save();
+          this.closeSettleModal();
+          this.toast(`${friendName} ilə ${this.formatCurrency(amount)} bağlandı`, 'success');
+        },
+
+        /* ── P2P Sync / Share ── */
+        async openShareSheet() {
+          this.modals.share = true;
+          this.syncError = '';
+          this.syncUrl = '';
+
+          try {
+            if (!this.config.groupPasscode) {
+              this.syncError = 'Əvvəlcə qrup parolu təyin edin (Dostlar → Parametrlər)';
+              return;
+            }
+
+            const payload = {
+              v: 1,
+              syncedAt: Date.now(),
+              friends: this.friends,
+              expenses: this.expenses,
+            };
+
+            const json = JSON.stringify(payload);
+            const compressed = await Compression.compress(json);
+            const b64compressed = btoa(String.fromCharCode(...compressed));
+            const encrypted = await CryptoEngine.encrypt(this.config.groupPasscode, b64compressed);
+            const encoded = encodeURIComponent(encrypted);
+
+            const base = window.location.href.split('#')[0];
+            this.syncUrl = `${base}#/sync?data=${encoded}`;
+
+            this.$nextTick(() => this.renderQR());
+          } catch (err) {
+            console.error('[Debtly] Sync generation failed:', err);
+            this.syncError = 'Sinxron linki yaradıla bilmədi';
+          }
+        },
+
+        renderQR() {
+          const el = document.getElementById('qr-code');
+          if (!el || !this.syncUrl) return;
+          el.innerHTML = '';
+          QRCode.toCanvas(this.syncUrl, { width: 180, margin: 1, color: { dark: '#18181b', light: '#ffffff' } }, (err, canvas) => {
+            if (err) {
+              console.error('[Debtly] QR generation failed:', err);
+              return;
+            }
+            el.appendChild(canvas);
+          });
+        },
+
+        closeShareSheet() {
+          this.modals.share = false;
+        },
+
+        async copySyncLink() {
+          if (!this.syncUrl) return;
+          try {
+            await navigator.clipboard.writeText(this.syncUrl);
+            this.toast('Link kopyalandı!', 'success');
+          } catch {
+            this.toast('Kopyalama uğursuz — əl ilə seçin', 'error');
+          }
+        },
+
+        /* ── Sync Import (URL hash handler) ── */
+        handleSyncUrl() {
+          const hash = window.location.hash;
+          if (!hash.startsWith('#/sync')) return;
+
+          try {
+            const queryStr = hash.includes('?') ? hash.split('?')[1] : '';
+            const params = new URLSearchParams(queryStr);
+            const data = params.get('data');
+
+            if (!data) {
+              this.toast('Səhv sinxron linki — məlumat tapılmadı', 'error');
+              this.clearSyncHash();
+              return;
+            }
+
+            this.pendingSyncData = decodeURIComponent(data);
+            this.syncImportPasscode = this.config.groupPasscode || '';
+            this.modals.syncImport = true;
+          } catch (err) {
+            console.error('[Debtly] Sync URL parse error:', err);
+            this.toast('Səhv formatlı sinxron URL', 'error');
+            this.clearSyncHash();
+          }
+        },
+
+        async confirmSyncImport() {
+          if (!this.pendingSyncData || !this.syncImportPasscode) {
+            this.toast('Qrup parolunu daxil edin', 'error');
+            return;
+          }
+
+          try {
+            const decrypted = await CryptoEngine.decrypt(this.syncImportPasscode, this.pendingSyncData);
+            const compressed = Uint8Array.from(atob(decrypted), c => c.charCodeAt(0));
+            const json = await Compression.decompress(compressed);
+            const incoming = JSON.parse(json);
+
+            if (!incoming || typeof incoming !== 'object') {
+              throw new Error('Invalid payload structure');
+            }
+
+            const merged = MergeEngine.mergeAll(
+              { config: this.config, friends: this.friends, expenses: this.expenses },
+              { config: { groupPasscode: this.syncImportPasscode }, friends: incoming.friends, expenses: incoming.expenses }
+            );
+
+            this.friends = merged.friends;
+            this.expenses = merged.expenses;
+            if (!this.config.groupPasscode) {
+              this.config.groupPasscode = this.syncImportPasscode;
+            }
+            this.save();
+
+            const addedFriends = incoming.friends?.length || 0;
+            const addedExpenses = incoming.expenses?.length || 0;
+            this.toast(`Birləşdirildi: ${addedFriends} dost, ${addedExpenses} xərc yoxlanıldı`, 'success');
+
+            this.modals.syncImport = false;
+            this.pendingSyncData = null;
+            this.clearSyncHash();
+          } catch (err) {
+            console.error('[Debtly] Sync import failed:', err);
+            this.toast('Şifrə açıla bilmədi — parolu yoxlayın', 'error');
+          }
+        },
+
+        cancelSyncImport() {
+          this.modals.syncImport = false;
+          this.pendingSyncData = null;
+          this.clearSyncHash();
+        },
+
+        clearSyncHash() {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        },
+
+        /* ── Display Helpers ── */
+        getPersonName(id) {
+          if (id === ME_ID) return this.config.myName || 'Mən';
+          return this.friends.find(f => f.id === id)?.name || 'Naməlum';
+        },
+
+        initials(name) {
+          if (!name) return '?';
+          return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+        },
+
+        formatCurrency(amount, showSign = false) {
+          const abs = Math.abs(amount);
+          const formatted = abs.toLocaleString('az', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          if (showSign) {
+            if (amount > 0) return `+₼${formatted}`;
+            if (amount < 0) return `-₼${formatted}`;
+            return `₼${formatted}`;
+          }
+          return `₼${formatted}`;
+        },
+
+        formatDate(ts) {
+          if (!ts) return '';
+          return new Date(ts).toLocaleDateString('az', { month: 'short', day: 'numeric', year: 'numeric' });
+        },
+
+        toast(message, type = 'info') {
+          const id = uid();
+          this.toasts.push({ id, message, type, visible: true });
+          setTimeout(() => {
+            const t = this.toasts.find(x => x.id === id);
+            if (t) t.visible = false;
+            setTimeout(() => {
+              this.toasts = this.toasts.filter(x => x.id !== id);
+            }, 300);
+          }, 3000);
+        },
+      };
+    }
+  </script>
+</body>
+</html>
